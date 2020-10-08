@@ -1,0 +1,14 @@
+harbor_hostname: harbor.example.com
+harbor_username: admin
+harbor_password: Harbor12345
+harbor_project: tbs
+kubeconfig: |
+  <KUBECONFIG>
+tbs_pipeline_tools_img: <IMG_WITH_PIPELINE_DEPENDENCIES>
+pivnet_api_token: <PIVNET_TOKEN>
+pivnet_username: <PIVNET_USERNAME>
+pivnet_password: <PIVNET_PASSWORD>
+ca_cert: |
+  -----BEGIN CERTIFICATE-----
+  ...
+  -----END CERTIFICATE-----

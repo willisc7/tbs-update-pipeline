@@ -1,0 +1,98 @@
+# TODO:
+# - make tbs_pipeline_tools_img in a sustainable way thats continuously 
+#   patched and updated. Once we have that, we can eliminate all of the
+#   messy apt and cert install lines.
+
+resource_types:
+- name: pivnet
+  type: docker-image
+  source:
+    repository: pivotalcf/pivnet-resource
+    tag: latest-final
+
+resources:
+- name: build-service
+  type: pivnet
+  source:
+    api_token: ((pivnet_api_token))
+    product_slug: build-service
+    product_version: 1\..*\..*
+- name: tbs-dependencies
+  type: pivnet
+  source:
+    api_token: ((pivnet_api_token))
+    product_slug: tbs-dependencies
+    product_version: .*
+
+params:
+  harbor: &harbor
+    HARBOR_HOSTNAME: ((harbor_hostname))
+    HARBOR_URL: https://((harbor_hostname))
+    HARBOR_USERNAME: ((harbor_username))
+    HARBOR_PASSWORD: ((harbor_password))
+    HARBOR_PROJECT: ((harbor_project))
+    HARBOR_REPOSITORY: ((harbor_hostname))/((harbor_project))/build-service
+  pivnet: &pivnet
+    PIVNET_USERNAME: ((pivnet_username))
+    PIVNET_PASSWORD:  ((pivnet_password))
+
+jobs:
+- name: kp-import
+  plan:
+  - in_parallel:
+    - get: tbs-dependencies
+      trigger: true
+    - get: kp
+      resource: build-service
+      params:
+        globs: ["kp-linux-*"]
+  - task: kp-import
+    params:
+      <<: *harbor
+      <<: *pivnet
+      KUBECONFIG_VALUE: ((kubeconfig))
+      CA_CERT: ((ca_cert))
+    config:
+      platform: linux
+      image_resource:
+        type: docker-image
+        source:
+          repository: ((tbs_pipeline_tools_img))
+      inputs:
+      - name: kp
+      - name: tbs-dependencies
+      run:
+        path: bash
+        args:
+        - -cex
+        - |
+          # Install docker CLI
+          # TODO: whole block can be eliminated once tbs_pipeline_tools_img is made
+          export DEBIAN_FRONTEND=noninteractive
+          mkdir /etc/docker
+          echo '{"insecure-registries" : ["<INSECURE_REGISTRY_FQDN>"]}' > /etc/docker/daemon.json
+          apt-get update
+          apt-get install -y\
+            apt-transport-https \
+            ca-certificates \
+            curl \
+            gnupg-agent \
+            software-properties-common
+          echo "${CA_CERT}" > /usr/local/share/ca-certificates/ca_cert.crt
+          update-ca-certificates
+          curl -fsSL https://download.docker.com/linux/ubuntu/gpg | apt-key add -
+          add-apt-repository \
+            "deb [arch=amd64] https://download.docker.com/linux/ubuntu \
+            $(lsb_release -cs) \
+            stable"
+          apt-get install -y docker-ce docker-ce-cli containerd.io
+          install kp/kp-linux-* /usr/local/bin/kp
+          
+          # Install latest TBS stacks and buildpacks
+          mkdir -p ~/.kube
+          cat <<EOF > ~/.kube/config
+          ${KUBECONFIG_VALUE}
+          EOF
+          docker login registry.pivotal.io -u ${PIVNET_USERNAME} -p ${PIVNET_PASSWORD}
+          docker login ${HARBOR_HOSTNAME} -u ${HARBOR_USERNAME} -p ${HARBOR_PASSWORD}
+          kp import -f ./tbs-dependencies/descriptor-*.yaml
