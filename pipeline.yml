@@ -70,7 +70,7 @@ jobs:
           # TODO: whole block can be eliminated once tbs_pipeline_tools_img is made
           export DEBIAN_FRONTEND=noninteractive
           mkdir /etc/docker
-          echo '{"insecure-registries" : ["<INSECURE_REGISTRY_FQDN>"]}' > /etc/docker/daemon.json
+          echo '{"insecure-registries" : ["((harbor_hostname))"]}' > /etc/docker/daemon.json
           apt-get update
           apt-get install -y\
             apt-transport-https \
